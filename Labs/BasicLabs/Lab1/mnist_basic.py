@@ -34,9 +34,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import torchvision
 from torchvision import datasets, transforms
 from torch.optim.lr_scheduler import StepLR
-
+import torch.autograd.profiler as profiler
+from torch.utils.tensorboard import SummaryWriter
+writer = SummaryWriter('runs/ex1')
 
 class Net(nn.Module):
     def __init__(self):
@@ -66,6 +69,10 @@ class Net(nn.Module):
 
 def train(args, model, device, train_loader, optimizer, epoch):
     model.train()
+    # training loss
+    training_loss = 0.0
+    accuracy = 0.0
+
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
@@ -73,13 +80,25 @@ def train(args, model, device, train_loader, optimizer, epoch):
         loss = F.nll_loss(output, target)
         loss.backward()
         optimizer.step()
+
+        training_loss +=loss.item()
+        pred = output.argmax(dim=1, keepdim=True)
+        accuracy += pred.eq(target.view_as(pred)).sum().item()
+        
         if batch_idx % args.log_interval == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader), loss.item()))
+            
+            if batch_idx!=0:
+                global_step = (epoch-1)*len(train_loader)+batch_idx
+                writer.add_scalar('Loss/train', training_loss/(args.batch_size * args.log_interval), global_step)# mean loss
+                writer.add_scalar('Accuracy/train', 100.*accuracy/(args.batch_size * args.log_interval), global_step) #mean accuracy
+            
+            training_loss=0.0
+            accuracy=0.0
 
-
-def test(model, device, test_loader):
+def test(model, device, test_loader, epoch):
     model.eval()
     test_loss = 0
     correct = 0
@@ -93,13 +112,14 @@ def test(model, device, test_loader):
 
     test_loss /= len(test_loader.dataset)
 
+    writer.add_scalar('Loss/test', test_loss,epoch)
     print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
         test_loss, correct, len(test_loader.dataset),
         100. * correct / len(test_loader.dataset)))
 
 
-def main():
-    # Training settings
+def argument_pass():
+        # Training settings
     parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
     parser.add_argument('--batch-size', type=int, default=64, metavar='N',
                         help='input batch size for training (default: 64)')
@@ -120,7 +140,23 @@ def main():
 
     parser.add_argument('--save-model', action='store_true', default=False,
                         help='For Saving the current Model')
+    
     args = parser.parse_args()
+    return args
+ 
+def profile(model, device, train_loader):
+    print('profiling start:\n')
+    dataiter = iter(train_loader)
+    data, target = dataiter.next()
+    data, target = data.to(device), target.to(device)
+    with profiler.profile(record_shapes=True) as prof:
+        with profiler.record_function("model_inference"):
+            model(data)
+    print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
+    print('profiling finish.\n')
+
+def main():
+    args = argument_pass()
     use_cuda = not args.no_cuda and torch.cuda.is_available()
 
     torch.manual_seed(args.seed)
@@ -141,19 +177,32 @@ def main():
                            transforms.Normalize((0.1307,), (0.3081,))
                        ])),
         batch_size=args.test_batch_size, shuffle=True, **kwargs)
+    
+    dataiter = iter(train_loader)
+    images,labels = dataiter.next()
+    
+    img_grid = torchvision.utils.make_grid(images)
+    writer.add_image('images', img_grid, 0) 
+    # 缺少此句
+    images, labels = images.to(device), labels.to(device)
 
     model = Net().to(device)
+    writer.add_graph(model, images)
+    profile(model, device, train_loader)
+
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
 
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
     for epoch in range(1, args.epochs + 1):
         train(args, model, device, train_loader, optimizer, epoch)
-        test(model, device, test_loader)
+        test(model, device, test_loader, epoch)
         scheduler.step()
-
+    
+    
     if args.save_model:
         torch.save(model.state_dict(), "mnist_cnn.pt")
 
+    writer.close()
 
 if __name__ == '__main__':
     main()

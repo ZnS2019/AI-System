@@ -170,6 +170,8 @@ def main():
     #get some random traning images
     dataiter = iter(train_loader)
     images, labels = dataiter.next()
+    # 缺少此句
+    images, labels = images.to(device), labels.to(device)
 
     # show batch images
     grid = torchvision.utils.make_grid(images)
