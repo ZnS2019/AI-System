@@ -9,6 +9,7 @@ $ docker pull alpine
 > **注意:** 取决于你如何在你的系统中安装的Docker, 执行完上面的命令后，你可能看到`permission denied`错误 。尝试以下教程中的命令[verify your installation](https://docs.docker.com/engine/getstarted/step_one/#/step-3-verify-your-installation)去修正这个问题。 如果是在Linux下执行，可以在 `docker`命令前追加`sudo`. 或者可以[create a docker group](https://docs.docker.com/engine/installation/linux/ubuntulinux/#/create-a-docker-group)去解决这个问题。
 
 `pull`命令会从从**Docker registry** 下载alpine 镜像(**image**)并在你的系统中保存。你可以使用 `docker images` 命令去罗列出当前你的系统中的所有镜像。
+
 ```
 $ docker images
 REPOSITORY              TAG                 IMAGE ID            CREATED             VIRTUAL SIZE
@@ -53,7 +54,7 @@ hello from alpine
 $ docker run alpine /bin/sh
 ```
 
-为何当前什么也没有发生？是由于Bug吗？其实是因为当执行完这些脚本后这些交互式的shell会退出。除非将命令运行与交互式的终端，例如本例子可以执行以下命令进入交互式模式`docker run -it alpine /bin/sh`。
+为何当前什么也没有发生？是由于Bug吗？其实是因为当执行完这些脚本后这些交互式的shell会退出。除非将命令运行于交互式的终端，例如本例子可以执行以下命令进入交互式模式`docker run -it alpine /bin/sh`。
 
 当前你已经在容器的shell中，你可以尝试一些命令，例如`ls -l`, `uname -a` 或者其他命令。可以通过`exit`命令退出容器。
 
@@ -87,7 +88,7 @@ Linux 97916e8cb5dc 4.4.27-moby #1 SMP Wed Oct 26 14:01:48 UTC 2016 x86_64 Linux
 ```
 运行`run`命令时并附加`-it`选项，会让我们以一种交互式的方式进入容器中，这样用户可以执行更多所需要执行的命令。 
 
-如果想查询`run`命令的更多用法, 用户可以是哟领`docker run --help`去查询它所有支持的选项列表。 
+如果想查询`run`命令的更多用法, 用户可以使用docker run --help`去查询它所有支持的选项列表。 
 
 ### 2.2 术语表
 

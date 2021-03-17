@@ -28,19 +28,45 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+# This file has been changed for education and teaching purpose
+
 from __future__ import print_function
 import argparse
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-import torchvision
 from torchvision import datasets, transforms
 from torch.optim.lr_scheduler import StepLR
-import torch.autograd.profiler as profiler
-import time
-from torch.utils.tensorboard import SummaryWriter
-writer = SummaryWriter('runs/ex1')
+
+class myLinearFunction(torch.autograd.Function):
+    # Note that both forward and backward are @staticmethods
+    @staticmethod
+    def forward(ctx, input, weight):
+        ctx.save_for_backward(input, weight)
+        output = input.mm(weight.t())
+        return output
+        
+    @staticmethod
+    def backward(ctx, grad_output):
+        input, weight = ctx.saved_tensors
+        grad_input = grad_weight = None
+        #if ctx.needs_input_grad[0]:
+        grad_input = grad_output.mm(weight)
+        #if ctx.needs_input_grad[1]:
+        grad_weight = grad_output.t().mm(input)
+        return grad_input, grad_weight
+
+class myLinear(nn.Module):
+    def __init__(self, input_features, output_features):
+        super(myLinear, self).__init__()
+        self.input_features = input_features
+        self.output_features = output_features
+        self.weight = nn.Parameter(torch.Tensor(output_features, input_features))
+        self.weight.data.uniform_(-0.1, 0.1)
+    
+    def forward(self, input):
+        return myLinearFunction.apply(input, self.weight)
 
 class Net(nn.Module):
     def __init__(self):
@@ -50,7 +76,8 @@ class Net(nn.Module):
         self.dropout1 = nn.Dropout2d(0.25)
         self.dropout2 = nn.Dropout2d(0.5)
         self.fc1 = nn.Linear(9216, 128)
-        self.fc2 = nn.Linear(128, 10)
+        # self.fc2 = nn.Linear(128, 10)
+        self.fc2 = myLinear(128, 10)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -70,10 +97,6 @@ class Net(nn.Module):
 
 def train(args, model, device, train_loader, optimizer, epoch):
     model.train()
-    # training loss
-    training_loss = 0.0
-    accuracy = 0.0
-
     for batch_idx, (data, target) in enumerate(train_loader):
         data, target = data.to(device), target.to(device)
         optimizer.zero_grad()
@@ -81,25 +104,13 @@ def train(args, model, device, train_loader, optimizer, epoch):
         loss = F.nll_loss(output, target)
         loss.backward()
         optimizer.step()
-
-        training_loss +=loss.item()
-        pred = output.argmax(dim=1, keepdim=True)
-        accuracy += pred.eq(target.view_as(pred)).sum().item()
-        
         if batch_idx % args.log_interval == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader), loss.item()))
-            
-            if batch_idx!=0:
-                global_step = (epoch-1)*len(train_loader)+batch_idx
-                writer.add_scalar('Loss/train', training_loss/(args.batch_size * args.log_interval), global_step)# mean loss
-                writer.add_scalar('Accuracy/train', 100.*accuracy/(args.batch_size * args.log_interval), global_step) #mean accuracy
-            
-            training_loss=0.0
-            accuracy=0.0
 
-def test(model, device, test_loader, epoch):
+
+def test(model, device, test_loader):
     model.eval()
     test_loss = 0
     correct = 0
@@ -113,14 +124,13 @@ def test(model, device, test_loader, epoch):
 
     test_loss /= len(test_loader.dataset)
 
-    writer.add_scalar('Loss/test', test_loss,epoch)
     print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
         test_loss, correct, len(test_loader.dataset),
         100. * correct / len(test_loader.dataset)))
 
 
-def argument_pass():
-        # Training settings
+def main():
+    # Training settings
     parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
     parser.add_argument('--batch-size', type=int, default=64, metavar='N',
                         help='input batch size for training (default: 64)')
@@ -141,28 +151,13 @@ def argument_pass():
 
     parser.add_argument('--save-model', action='store_true', default=False,
                         help='For Saving the current Model')
-    
     args = parser.parse_args()
-    return args
- 
-def profile(model, device, train_loader):
-    print('profiling start:\n')
-    dataiter = iter(train_loader)
-    data, target = dataiter.next()
-    data, target = data.to(device), target.to(device)
-    with profiler.profile(record_shapes=True, use_cuda=True) as prof:
-        model(data)
-    print(prof.key_averages().table(sort_by="cuda_time", row_limit=10))
-    print('profiling finish.\n')
-
-def main():
-    start_time = time.time()
-    args = argument_pass()
     use_cuda = not args.no_cuda and torch.cuda.is_available()
 
     torch.manual_seed(args.seed)
 
     device = torch.device("cuda" if use_cuda else "cpu")
+
     kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
     train_loader = torch.utils.data.DataLoader(
         datasets.MNIST('../data', train=True, download=True,
@@ -177,34 +172,19 @@ def main():
                            transforms.Normalize((0.1307,), (0.3081,))
                        ])),
         batch_size=args.test_batch_size, shuffle=True, **kwargs)
-    
-    dataiter = iter(train_loader)
-    images,labels = dataiter.next()
-    
-    img_grid = torchvision.utils.make_grid(images)
-    writer.add_image('images', img_grid, 0) 
-    # 缺少此句
-    images, labels = images.to(device), labels.to(device)
 
     model = Net().to(device)
-    writer.add_graph(model, images)
-    profile(model, device, train_loader)
-
     optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
 
     scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
     for epoch in range(1, args.epochs + 1):
         train(args, model, device, train_loader, optimizer, epoch)
-        test(model, device, test_loader, epoch)
+        test(model, device, test_loader)
         scheduler.step()
-    
-    
+
     if args.save_model:
         torch.save(model.state_dict(), "mnist_cnn.pt")
 
-    writer.close()
-    end_time = time.time()
-    print('total training and testing time : ', end_time-start_time)
 
 if __name__ == '__main__':
     main()

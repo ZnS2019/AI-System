@@ -48,11 +48,11 @@
 
 ||||
 |--------|--------------|--------------------------|
-|硬件环境|CPU（vCPU数目）|&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; |
-||GPU(型号，数目)||
-|软件环境|OS版本||
-||深度学习框架<br>python包名称及版本||
-||CUDA版本||
+|硬件环境|CPU（vCPU数目）|&nbsp; &nbsp; &nbsp; |
+||GPU(型号，数目)|GTX 1660 Ti|
+|软件环境|OS版本|Ubuntu 18.04|
+||深度学习框架<br>python包名称及版本|PyTorch 1.5.0|
+||CUDA版本|10.1|
 ||||
 
 ### 实验结果
